@@ -171,6 +171,8 @@ class ScovatScript:
                 aprof.files[name] = bprof.files[name]
 
     def report(self, aprof, bprof): pass
+    def hamming(self, aprof, bprof): pass
+    def jaccard(self, aprof, bprof): pass
 
     class Transform:
         class Statement:
