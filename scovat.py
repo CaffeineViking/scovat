@@ -113,31 +113,104 @@ class ScovatScript:
 
         if not os.path.exists(output):
             os.makedirs(output)
+        # Copy first profile to output directory.
         [shutil.copy(os.path.join(result, f), output)
                      for f in result_files]
         del profiles[0] # Already processed.
 
         for profile in profiles:
+            # Find the sets of (un)matched files.
             profile_files = set(os.listdir(profile))
             unmatched = profile_files - set(result_files)
             matched = profile_files & set(result_files)
 
+            # Just copy unmatched.
             for uprofile in unmatched:
                 uprofile_path = os.path.join(profile, uprofile)
                 self.print_copy(uprofile_path, output)
                 shutil.copy(uprofile_path, output)
             result_files.extend(unmatched)
 
+            # Process any matched.
             for mprofile in matched:
                 output_path = os.path.join(output, mprofile)
                 profile_path = os.path.join(profile, mprofile)
                 self.print_process(profile_path, output_path)
-                operation(output_path, profile_path)
+                (a, b) = (output_path, profile_path)
+                with open(a, "r+b") as afile,\
+                     open(b, "r+b") as bfile:
+                    # Map all file contents into memory.
+                    adata = mmap.mmap(afile.fileno(), 0,
+                                    prot=mmap.PROT_READ)
+                    bdata = mmap.mmap(bfile.fileno(), 0,
+                                    prot=mmap.PROT_READ)
+                    # Parse intermediate representations.
+                    aparsed = self.parse_transform(adata)
+                    bparsed = self.parse_transform(bdata)
+                    # Don't need these anymore, yay!
+                    bdata.close() ; adata.close()
+                    operation(aparsed, bparsed)
 
     def intersection(self, a, b): pass
     def difference(self, a, b): pass
     def union(self, a, b): pass
     def report(self, a, b): pass
+
+    class Transform:
+        class Statement:
+            def __init__(self, line, count):
+                self.count = count
+                self.line = line
+        class Branch:
+            def __init__(self, line, btype):
+                self.btype = btype
+                self.line = line
+        class Function:
+            def __init__(self, line, count, name):
+                self.count = count
+                self.line = line
+                self.name = name
+        class File:
+            def __init__(self, name):
+                self.branches = []
+                self.statements = []
+                self.functions = []
+                self.name = name
+        def __init__(self):
+            self.files = {}
+
+    def parse_transform(self, data):
+        result = self.Transform()
+        for line in iter(data.readline, ""):
+            contents = line.split(":")
+            content = contents[1][:-1]
+            token = contents[0]
+            if token == "file":
+                result.files[content] = self.Transform.File(content)
+                current_file = result.files[content] # Optimize this later?
+            else: # Strip according to the common delimiter, then handle token.
+                content = content.split(",") # Might want to handle the case when arguments don't match a certain int type cast?
+                if token == "lcount": current_file.statements.append(self.Transform.Statement(int(content[0]), int(content[1])))
+                elif token == "branch": current_file.branches.append(self.Transform.Branch(int(content[0]), content[1]))
+                elif token == "function": current_file.functions.append(self.Transform.Function(int(content[0]), int(content[1]), content[2]))
+        return result
+
+    class Analysis:
+        class File:
+            def __init__(self, name):
+                self.branches = 0
+                self.total_branches = 0
+                self.branch_distance = 0
+                self.statements = 0
+                self.total_statements = 0
+                self.statement_distance = 0
+                self.functions = 0
+                self.total_function = 0
+                self.function_distance = 0
+        def __init__(self):
+            self.files = []
+
+    def parse_analysis(self, data): pass
 
     def print_crawl(self, folder):
         message = "crawling "
