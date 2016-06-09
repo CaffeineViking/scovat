@@ -53,7 +53,7 @@ class ScovatScript:
         elif options.union: self.union(options.output, options.inputs)
         elif options.report: self.report(options.output, options.inputs)
         else: sys.exit(1) # Shouldn't really arrive here given argparse.
-        print("{0:.2f}s".format(time.time()-begin))
+        print("executed in {0:.2f} seconds".format(time.time()-begin))
 
     def generate(self, build, output, inputs): pass
     def intersection(self, output, inputs): pass
