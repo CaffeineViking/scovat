@@ -179,11 +179,12 @@ class ScovatScript:
         def __init__(self):
             self.files = {}
 
+    def write_transform(self, data, output): pass
     def parse_transform(self, data):
         result = self.Transform()
         for line in iter(data.readline, ""):
             contents = line.split(":")
-            content = contents[1][:-1]
+            content = contents[1].rstrip("\r\n")
             token = contents[0]
             if token == "file":
                 result.files[content] = self.Transform.File(content)
@@ -210,6 +211,7 @@ class ScovatScript:
         def __init__(self):
             self.files = []
 
+    def write_analysis(self, data, output): pass
     def parse_analysis(self, data): pass
 
     def print_crawl(self, folder):
