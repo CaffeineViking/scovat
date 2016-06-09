@@ -40,13 +40,18 @@ class ScovatScript:
         option("inputs", metavar="IN", nargs="+",
                help="""""")
         self.options = parser.parse_args()
+        # Check that 'generate' always has 'build' and v.v.
+        if self.options.generate and not self.options.build or\
+           not self.options.generate and self.options.build:
+            parser.print_help()
+            sys.exit(1)
 
     def __enter__(self): return self
     def __exit__(self, etype, value, etrace): pass
     def execute(self, location=sys.argv[0]):
         begin = time.time()
         options = self.options
-        # Only dependent implicit argument is 'generate' since it requires 'build' path.
+        # Only implicitly dependent argument is 'generate', it needs 'build' flag set.
         if options.generate: self.generate(options.build, options.output, options.inputs)
         elif options.intersection: self.intersection(options.output, options.inputs)
         elif options.difference: self.difference(options.output, options.inputs)
