@@ -55,10 +55,10 @@ class ScovatScript:
         options = self.options
         # Only implicitly dependent argument is 'generate', it needs 'build' flag set.
         if options.generate: self.generate(options.build, options.output, options.inputs)
-        elif options.intersection: self.intersection(options.output, options.inputs)
-        elif options.difference: self.difference(options.output, options.inputs)
-        elif options.union: self.union(options.output, options.inputs)
-        elif options.report: self.report(options.output, options.inputs)
+        elif options.intersection: self.transform(options.output, options.inputs, self.intersection)
+        elif options.difference: self.transform(options.output, options.inputs, self.difference)
+        elif options.union: self.transform(options.output, options.inputs, self.union)
+        elif options.report: self.analyze(options.output, options.inputs)
         else: sys.exit(1) # Shouldn't really arrive here given argparse.
         print("executed in {0:.2f} seconds".format(time.time()-begin))
 
@@ -89,8 +89,9 @@ class ScovatScript:
             # Determine correct relative location in output path.
             normal_path = os.path.basename(os.path.normpath(input))
             output_path = os.path.join(output, normal_path)
-            if not os.path.isdir(output_path): os.makedirs(output_path)
             self.print_process(build, output_path)
+            if not os.path.isdir(output_path):
+                os.makedirs(output_path)
 
             # Generate intermediate files.
             for build_file in build_files:
@@ -102,10 +103,41 @@ class ScovatScript:
                     print("Need to have 'gcov' path defined in SCOVAT_GCOV env!")
                     sys.exit(1) # Nothing can be done about this, just terminate.
 
-    def intersection(self, output, inputs): pass
-    def difference(self, output, inputs): pass
-    def union(self, output, inputs): pass
-    def report(self, output, inputs): pass
+    def analyze(self, output, inputs): pass
+    def transform(self, output, inputs, operation):
+        profiles = inputs
+        result = profiles[0]
+        devnull = open(os.devnull, 'w')
+        result_files = os.listdir(result)
+        self.print_copy(result, output)
+
+        if not os.path.exists(output):
+            os.makedirs(output)
+        [shutil.copy(os.path.join(result, f), output)
+                     for f in result_files]
+        del profiles[0] # Already processed.
+
+        for profile in profiles:
+            profile_files = set(os.listdir(profile))
+            unmatched = profile_files - set(result_files)
+            matched = profile_files & set(result_files)
+
+            for uprofile in unmatched:
+                uprofile_path = os.path.join(profile, uprofile)
+                self.print_copy(uprofile_path, output)
+                shutil.copy(uprofile_path, output)
+            result_files.extend(unmatched)
+
+            for mprofile in matched:
+                output_path = os.path.join(output, mprofile)
+                profile_path = os.path.join(profile, mprofile)
+                self.print_process(profile_path, output_path)
+                operation(output_path, profile_path)
+
+    def intersection(self, a, b): pass
+    def difference(self, a, b): pass
+    def union(self, a, b): pass
+    def report(self, a, b): pass
 
     def print_crawl(self, folder):
         message = "crawling "
@@ -115,6 +147,10 @@ class ScovatScript:
         message = "copying "
         message += "'" + origin + "' to "
         message += "'" + destination + "'"
+        print(message)
+    def print_remove(self, path):
+        message = "removing "
+        message += "'" + path + "'"
         print(message)
     def print_process(self, folder, output):
         message = "processing "
