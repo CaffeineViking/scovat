@@ -64,22 +64,19 @@ class ScovatScript:
 
     def generate(self, build, output, inputs):
         devnull = open(os.devnull, 'w')
-        for input in inputs:
-            command = "find "
-            command += "'" + input +  "' "
-            command += "-name '*.gcda'"
-            self.print_crawl(input)
-
+        for profile in inputs:
+            self.print_crawl(profile)
+            command = "find '{}' -name '*.gcda'".format(profile)
             # Crawl the input directory and try to find all of the GCDA files.
             results = subprocess.Popen(command, shell=True, stdin=subprocess.PIPE,
                                        stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             (outputs, errors) = results.communicate() # Extract stdout and stderr data.
             files = outputs.decode().split() # Split continuous file output to list.
-            relative_files = [os.path.relpath(file, start=input) for file in files]
+            relative_files = [os.path.relpath(f, start=profile) for f in files]
 
             build_files = []
-            self.print_copy(input, build)
-            for i in range(len(files)):
+            self.print_copy(profile, build)
+            for i in xrange(len(files)):
                 # Determine location of the raw binary coverages.
                 build_file = os.path.join(build, relative_files[i])
                 # Copy data files to correct location in build dir.
@@ -87,7 +84,7 @@ class ScovatScript:
                 build_files.append(build_file)
 
             # Determine correct relative location in output path.
-            normal_path = os.path.basename(os.path.normpath(input))
+            normal_path = os.path.basename(os.path.normpath(profile))
             output_path = os.path.join(output, normal_path)
             self.print_process(build, output_path)
             if not os.path.isdir(output_path):
@@ -95,9 +92,8 @@ class ScovatScript:
 
             # Generate intermediate files.
             for build_file in build_files:
-                command = self.GCOV + " -ib "
-                command += "'" + os.path.abspath(build_file) + "'"
                 # Change directory to output, since gcov outputs there.
+                command = "{} -ib '{}'".format(self.GCOV, os.path.abspath(build_file))
                 if subprocess.call(command, shell=True, cwd=output_path,
                                    stdout=devnull, stderr=subprocess.STDOUT) == 1:
                     print("Need to have 'gcov' path defined in SCOVAT_GCOV env!")
@@ -149,12 +145,32 @@ class ScovatScript:
                     bparsed = self.parse_transform(bdata)
                     # Don't need these anymore, yay!
                     bdata.close() ; adata.close()
-                    operation(aparsed, bparsed)
+                    operation(aparsed, bparsed) # Go!
+                    # Results overwrite the 'a' profile.
+                    self.write_transform(aparsed, a)
 
-    def intersection(self, a, b): pass
-    def difference(self, a, b): pass
-    def union(self, a, b): pass
-    def report(self, a, b): pass
+    def intersection(self, aprof, bprof): pass
+    def difference(self, aprof, bprof): pass
+    def union(self, aprof, bprof):
+        for name in aprof.files:
+            afile = aprof.files[name]
+            if name in bprof.files:
+                bfile = bprof.files[name]
+                for f in xrange(len(afile.functions)):
+                    afile.functions[f].count += bfile.functions[f].count
+                for b in xrange(len(afile.branches)):
+                    if bfile.branches[b].btype == "taken":
+                        afile.branches[b].btype = "taken"
+                    elif bfile.branches[b].btype == "nottaken" and\
+                         afile.branches[b].btype == "notexec":
+                        afile.branches[b].btype = "nottaken"
+                for s in xrange(len(afile.statements)):
+                    afile.statements[s].count += bfile.statements[s].count
+        for name in bprof.files:
+            if name not in aprof.files:
+                aprof.files[name] = bprof.files[name]
+
+    def report(self, aprof, bprof): pass
 
     class Transform:
         class Statement:
@@ -179,7 +195,15 @@ class ScovatScript:
         def __init__(self):
             self.files = {}
 
-    def write_transform(self, data, output): pass
+    def write_transform(self, data, output):
+        with open(output, "w") as profile:
+            for i in data.files:
+                p = data.files[i]
+                profile.write("file:{}\n".format(p.name))
+                for f in p.functions: profile.write("function:{},{},{}\n".format(f.line, f.count, f.name))
+                for b in p.branches: profile.write("branch:{},{}\n".format(b.line, b.btype))
+                for s in p.statements: profile.write("lcount:{},{}\n".format(s.line, s.count))
+
     def parse_transform(self, data):
         result = self.Transform()
         for line in iter(data.readline, ""):
@@ -199,6 +223,7 @@ class ScovatScript:
     class Analysis:
         class File:
             def __init__(self, name):
+                self.name = name
                 self.branches = 0
                 self.total_branches = 0
                 self.branch_distance = 0
@@ -209,31 +234,35 @@ class ScovatScript:
                 self.total_function = 0
                 self.function_distance = 0
         def __init__(self):
-            self.files = []
+            self.files = {}
 
-    def write_analysis(self, data, output): pass
+    def write_analysis(self, data, output):
+        with open(output, "w") as profile:
+            for i in data.files:
+                p = data.files[i]
+                profile.write("file:{}\n".format(p.name))
+                profile.write("functions:{},{},{0:.2f}\n".format(p.functions,
+                                                                 p.total_functions,
+                                                                 p.functions / p.total_functions))
+                profile.write("branches:{},{},{0:.2f}\n".format(p.branches,
+                                                                p.total_branches,
+                                                                p.branches / p.total_branches))
+                profile.write("statements:{},{},{0:.2f}\n".format(p.statements,
+                                                                  p.total_statements,
+                                                                  p.statements / p.total_statements))
+                profile.write("hamming:{},{},{}\n".format(42, 42, 42))
+                profile.write("jaccard:{},{},{}\n".format(42, 42, 42))
+
     def parse_analysis(self, data): pass
 
     def print_crawl(self, folder):
-        message = "crawling "
-        message += "'" + folder  + "'"
-        print(message)
+        print("crawling '{}'".format(folder))
     def print_copy(self, origin, destination):
-        message = "copying "
-        message += "'" + origin + "' to "
-        message += "'" + destination + "'"
-        print(message)
+        print("copying '{}' to '{}'".format(origin, destination))
     def print_remove(self, path):
-        message = "removing "
-        message += "'" + path + "'"
-        print(message)
+        print("removing '{}'".format(path))
     def print_process(self, folder, output):
-        message = "processing "
-        message += "'" + folder + "' to "
-        message += "'" + output + "'"
-        print(message)
-
-
+        print("processing '{}' to '{}'".format(folder, output))
 
 INIT_ERROR_STATE = -1
 if __name__ == "__main__":
