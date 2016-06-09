@@ -4,6 +4,7 @@
 import os
 import sys
 import time
+import mmap
 import shutil
 import fnmatch
 import argparse
@@ -41,8 +42,24 @@ class ScovatScript:
         self.options = parser.parse_args()
 
     def __enter__(self): return self
-    def execute(self, location=sys.argv[0]): pass
     def __exit__(self, etype, value, etrace): pass
+    def execute(self, location=sys.argv[0]):
+        begin = time.time()
+        options = self.options
+        # Only dependent implicit argument is 'generate' since it requires 'build' path.
+        if options.generate: self.generate(options.build, options.output, options.inputs)
+        elif options.intersection: self.intersection(options.output, options.inputs)
+        elif options.difference: self.difference(options.output, options.inputs)
+        elif options.union: self.union(options.output, options.inputs)
+        elif options.report: self.report(options.output, options.inputs)
+        else: sys.exit(1) # Shouldn't really arrive here given argparse.
+        print("{0:.2f}s".format(time.time()-begin))
+
+    def generate(self, build, output, inputs): pass
+    def intersection(self, output, inputs): pass
+    def difference(self, output, inputs): pass
+    def union(self, output, inputs): pass
+    def report(self, output, inputs): pass
 
 INIT_ERROR_STATE = -1
 if __name__ == "__main__":
