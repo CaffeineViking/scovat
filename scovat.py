@@ -31,7 +31,7 @@ class ScovatScript:
                   help="""""")
         operation("-u", "--union", dest="union", action="store_true",
                   help="""""")
-        operation("-r", "--report", dest="report", action="store_true",
+        operation("-a", "--analyze", dest="analyze", action="store_true",
                   help="""""")
 
         option("-o", "--output", dest="output", metavar="OUT", required=True,
@@ -58,7 +58,7 @@ class ScovatScript:
         elif options.intersection: self.transform(options.output, options.inputs, self.intersection)
         elif options.difference: self.transform(options.output, options.inputs, self.difference)
         elif options.union: self.transform(options.output, options.inputs, self.union)
-        elif options.report: self.analyze(options.output, options.inputs)
+        elif options.analyze: self.analyze(options.output, options.inputs)
         else: sys.exit(1) # Shouldn't really arrive here given argparse.
         print("executed in {0:.2f} seconds".format(time.time()-begin))
 
@@ -99,7 +99,24 @@ class ScovatScript:
                     print("Need to have 'gcov' path defined in SCOVAT_GCOV env!")
                     sys.exit(1) # Nothing can be done about this, just terminate.
 
-    def analyze(self, output, inputs): pass
+    def analyze(self, output, inputs):
+        profiles = inputs ; profile_anchor = profiles[0]
+        self.transform(output, profiles[1:], self.union)
+        # After this, only two profiles, A and B exists.
+        # Where B is 'union' of them, except the anchor.
+
+        analysis = Analysis() # Results from analysis.
+        # Find out matching and unmatching files here.
+        anchor_files = set(os.listdir(profile_anchor))
+        output_files = set(os.listdir(output))
+        matched = output_files & anchor_files
+        lunmatched = output_files - anchor_files
+        runmatched = anchor_files - output_files
+
+        for uprofile in lunmatched: pass
+        for uprofile in runmatched: pass
+        for mprofile in matched: pass
+
     def transform(self, output, inputs, operation):
         profiles = inputs
         result = profiles[0]
@@ -333,6 +350,15 @@ class ScovatScript:
                 self.function_distance = 0
         def __init__(self):
             self.files = {}
+            self.branches = 0
+            self.total_branches = 0
+            self.branch_distance = 0
+            self.statements = 0
+            self.total_statements = 0
+            self.statement_distance = 0
+            self.functions = 0
+            self.total_function = 0
+            self.function_distance = 0
 
     def write_analysis(self, data, output):
         with open(output, "w") as profile:
