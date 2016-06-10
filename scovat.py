@@ -149,33 +149,45 @@ class ScovatScript:
                     # Results overwrite the 'a' profile.
                     self.write_transform(aparsed, a)
 
+    def intersection_function(self, a, b):
+        if a.count == 0 or\
+           b.count == 0:
+            a.count = 0
+        else: a.count += b.count
+
+    def intersection_branch(self, a, b):
+        if a.btype == "taken" and\
+           b.btype == "taken":
+            a.btype = "taken"
+        elif (a.btype == "taken" and\
+              b.btype == "nottaken") or\
+             (a.btype == "nottaken" and\
+              b.btype == "taken") or\
+             (a.btype == "nottaken" and \
+              b.btype == "nottaken"):
+            a.btype = "nottaken"
+        else: a.btype = "notexec"
+
+    def intersection_statement(self, a, b):
+        if a.count == 0 or\
+           b.count == 0:
+            a.count = 0
+        else: a.count += b.count
+
     def intersection(self, aprof, bprof):
         for name in aprof.files:
             afile = aprof.files[name]
             if name in bprof.files:
                 bfile = bprof.files[name]
                 for f in xrange(len(afile.functions)):
-                    if afile.functions[f].count == 0 or\
-                       bfile.functions[f].count == 0:
-                        afile.functions[f].count = 0
-                    else: afile.functions[f].count += bfile.functions[f].count
+                    self.intersection_function(afile.functions[f],
+                                               bfile.functions[f])
                 for b in xrange(len(afile.branches)):
-                    if bfile.branches[b].btype == "taken" and\
-                       afile.branches[b].btype == "taken":
-                        afile.branches[b].btype = "taken"
-                    elif (bfile.branches[b].btype == "nottaken" and\
-                         afile.branches[b].btype == "taken") or\
-                         (bfile.branches[b].btype == "taken" and\
-                         afile.branches[b].btype == "nottaken") or\
-                         (bfile.branches[b].btype == "nottaken" and\
-                         afile.branches[b].btype == "nottaken"):
-                        afile.branches[b].btype = "nottaken"
-                    else: afile.branches[b].btype = "notexec"
+                    self.intersection_branch(afile.branches[b],
+                                             bfile.branches[b])
                 for s in xrange(len(afile.statements)):
-                    if afile.statements[s].count == 0 or\
-                       bfile.statements[s].count == 0:
-                        afile.statements[s].count = 0
-                    else: afile.statements[s].count += bfile.statements[s].count
+                    self.intersection_statement(afile.statements[s],
+                                                bfile.statements[s])
         for name in bprof.files:
             if name not in aprof.files:
                 aprof.files[name] = bprof.files[name]
@@ -185,6 +197,18 @@ class ScovatScript:
                     b.btype = "notexec"
                 for s in aprof.files[name].statements:
                     s.count = 0
+
+    def difference_function(self, a, b):
+        if b.count != 0:
+            a.count = 0
+
+    def difference_branch(self, a, b):
+        if a.btype == b.btype:
+            a.btype = "notexec"
+
+    def difference_statement(self, a, b):
+        if b.count != 0:
+            a.count = 0
 
     def difference(self, aprof, bprof):
         for name in aprof.files:
@@ -192,14 +216,14 @@ class ScovatScript:
             if name in bprof.files:
                 bfile = bprof.files[name]
                 for f in xrange(len(afile.functions)):
-                    if bfile.functions[f].count != 0:
-                        afile.functions[f].count = 0
+                    self.difference_function(afile.functions[f],
+                                             bfile.functions[f])
                 for b in xrange(len(afile.branches)):
-                    if bfile.branches[b].btype == afile.branches[b].btype:
-                        afile.branches[b].btype = "notexec"
+                    self.difference_branch(afile.branches[b],
+                                           bfile.branches[b])
                 for s in xrange(len(afile.statements)):
-                    if bfile.statements[s].count != 0:
-                        afile.statements[s].count = 0
+                    self.difference_statement(afile.statements[s],
+                                              bfile.statements[s])
         for name in bprof.files:
             if name not in aprof.files:
                 aprof.files[name] = bprof.files[name]
@@ -210,21 +234,34 @@ class ScovatScript:
                 for s in aprof.files[name].statements:
                     s.count = 0
 
+    def union_function(self, a, b):
+        a.count += b.count
+
+    def union_branch(self, a, b):
+        if a.btype == "taken" or\
+           b.btype == "taken":
+           a.btype = "taken"
+        elif a.btype == "nottaken" or\
+             b.btype == "nottaken":
+            a.btype = "nottaken"
+
+    def union_statement(self, a, b):
+        a.count += b.count
+
     def union(self, aprof, bprof):
         for name in aprof.files:
             afile = aprof.files[name]
             if name in bprof.files:
                 bfile = bprof.files[name]
                 for f in xrange(len(afile.functions)):
-                    afile.functions[f].count += bfile.functions[f].count
+                    self.union_function(afile.functions[f],
+                                        bfile.functions[f])
                 for b in xrange(len(afile.branches)):
-                    if bfile.branches[b].btype == "taken":
-                        afile.branches[b].btype = "taken"
-                    elif bfile.branches[b].btype == "nottaken" and\
-                         afile.branches[b].btype == "notexec":
-                        afile.branches[b].btype = "nottaken"
+                    self.union_branch(afile.branches[b],
+                                      bfile.branches[b])
                 for s in xrange(len(afile.statements)):
-                    afile.statements[s].count += bfile.statements[s].count
+                    self.union_statement(afile.statements[s],
+                                         bfile.statements[s])
         for name in bprof.files:
             if name not in aprof.files:
                 aprof.files[name] = bprof.files[name]
