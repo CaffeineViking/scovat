@@ -101,21 +101,49 @@ class ScovatScript:
 
     def analyze(self, output, inputs):
         profiles = inputs ; profile_anchor = profiles[0]
-        self.transform(output, profiles[1:], self.union)
-        # After this, only two profiles, A and B exists.
-        # Where B is 'union' of them, except the anchor.
+        if len(profiles) != 1: self.transform(output, profiles[1:], self.union)
+        else: shutil.rmtree(output, ignore_errors=True)
+        # After this, only two profiles, A and B exists. Only if several files.
+        # Where B is 'union' of them, except the anchor. Anchor isn't analyzed.
+        if not os.path.exists(output):
+            os.makedirs(output)
 
-        analysis = Analysis() # Results from analysis.
         # Find out matching and unmatching files here.
         anchor_files = set(os.listdir(profile_anchor))
         output_files = set(os.listdir(output))
         matched = output_files & anchor_files
-        lunmatched = output_files - anchor_files
-        runmatched = anchor_files - output_files
+        runmatched = output_files - anchor_files
+        lunmatched = anchor_files - output_files
 
-        for uprofile in lunmatched: pass
-        for uprofile in runmatched: pass
-        for mprofile in matched: pass
+        for luprofile in lunmatched:
+            output_path = os.path.join(output, luprofile)
+            anchor_path = os.path.join(profile_anchor, luprofile)
+            self.print_report(anchor_path, output_path)
+            anchor_transform = self.Transform()
+            anchor_transform.read(anchor_path)
+            analysis = self.Analysis()
+            analysis.process(anchor_transform)
+            analysis.write(output_path)
+
+        for ruprofile in runmatched:
+            output_path = os.path.join(output, ruprofile)
+            self.print_report(output_path, output_path)
+            output_transform = self.Transform()
+            output_transform.read(output_path)
+            analysis = self.Analysis()
+            analysis.process(output_transform)
+            analysis.write(output_path)
+
+        for mprofile in matched:
+            output_path = os.path.join(output, mprofile)
+            anchor_path = os.path.join(profile_anchor, mprofile)
+            self.print_compare(anchor_path, output_path, output_path)
+            (a, b) = (output_path, anchor_path)
+            (at, bt) = (self.Transform(), self.Transform())
+            at.read(a) ; bt.read(b) # Parse profile data.
+            analysis = self.Analysis() # Results from it.
+            analysis.compare(at, bt) # Hamming, Jaccard.
+            analysis.write(output_path) # Overwrite tmp.
 
     def transform(self, output, inputs, operation):
         profiles = inputs
@@ -276,10 +304,6 @@ class ScovatScript:
             if name not in aprof.files:
                 aprof.files[name] = bprof.files[name]
 
-    def report(self, aprof, bprof): pass
-    def hamming(self, aprof, bprof): pass
-    def jaccard(self, aprof, bprof): pass
-
     class Transform:
         class Statement:
             def __init__(self, line, count):
@@ -346,43 +370,70 @@ class ScovatScript:
         class File:
             def __init__(self, name):
                 self.name = name
-                self.branches = (0, 0)
-                self.statements = (0, 0)
-                self.functions = (0, 0)
-                self.hamming = (0, 0, 0)
-                self.jaccard = (0, 0, 0)
+                self.branches = [0, 0]
+                self.statements = [0, 0]
+                self.functions = [0, 0]
+                self.hamming = [0, 0, 0]
+                self.jaccard = [0, 0, 0]
+        branches = [0, 0]
+        statements = [0, 0]
+        functions = [0, 0]
+        hamming = [0, 0, 0]
+        jaccard = [0, 0, 0]
         def __init__(self):
             self.files = {}
-            self.branches = (0, 0)
-            self.statements = (0, 0)
-            self.functions = (0, 0)
-            self.hamming = (0, 0, 0)
-            self.jaccard = (0, 0, 0)
+
+        def process(self, transform):
+            for name in transform.files:
+                profile = transform.files[name]
+                self.files[name] = self.File(name)
+                p = self.files[name] # For easy access.
+
+                self.functions[1] += len(profile.functions)
+                p.functions[1] = len(profile.functions)
+                for f in profile.functions:
+                    if f.count > 0:
+                        p.functions[0] += 1
+                p.hamming[0] = p.functions[0]
+                self.branches[1] += len(profile.branches)
+                p.branches[1] = len(profile.branches)
+                for b in profile.branches:
+                    if b.btype == "taken":
+                        p.branches[0] += 1
+                p.hamming[1] = p.branches[0]
+                self.statements[1] += len(profile.statements)
+                p.statements[1] = len(profile.statements)
+                for s in profile.statements:
+                    if s.count > 0:
+                        p.statements[0] += 1
+                p.hamming[2] = p.statements[0]
+                p.jaccard = [0.0, 0.0, 0.0]
+
+        def compare(self, a, b): pass
         def write(self, path):
             with open(path, "w") as handle:
                 for name in self.files:
                     profile = self.files[name]
-                    handle.write("file:{}\n".format(profile.name))
-                    handle.write("functions:{},{},{0:.2f}\n".format(profile.functions[0],
-                                                                    profile.functions[1],
-                                                                    profile.functions[0] / profile.functions[1]))
-                    handle.write("branches:{},{},{0:.2f}\n".format(profile.branches[0],
-                                                                   profile.branches[1],
-                                                                   profile.branches[0] / profile.branches[1]))
-                    handle.write("statements:{},{},{0:.2f}\n".format(profile.statements[0],
-                                                                     profile.statements[1],
-                                                                     profile.statements[0] / profile.statements[1]))
+                    handle.write("analysis:{}\n".format(profile.name))
+                    if profile.functions[1] > 0: handle.write("functions:{},{},{:.2f}%\n".format(profile.functions[0], profile.functions[1],
+                                                              float(profile.functions[0]) / float(profile.functions[1]) * 100))
+                    if profile.branches[1] > 0: handle.write("branches:{},{},{:.2f}%\n".format(profile.branches[0], profile.branches[1],
+                                                             float(profile.branches[0]) / float(profile.branches[1]) * 100))
+                    if profile.statements[1] > 0: handle.write("statements:{},{},{:.2f}%\n".format(profile.statements[0], profile.statements[1],
+                                                               float(profile.statements[0]) / float(profile.statements[1]) * 100))
+                    handle.write("jaccard:{:.2f},{:.2f},{:.2f}\n".format(profile.jaccard[0], profile.jaccard[1], profile.jaccard[2]))
                     handle.write("hamming:{},{},{}\n".format(profile.hamming[0], profile.hamming[1], profile.hamming[2]))
-                    handle.write("jaccard:{},{},{}\n".format(profile.jaccard[0], profile.jaccard[1], profile.jaccard[2]))
 
     def print_crawl(self, folder):
         print("crawling   '{}'".format(folder))
     def print_copy(self, origin, destination):
         print("copying    '{}' to '{}'".format(origin, destination))
-    def print_remove(self, path):
-        print("removing   '{}'".format(path))
     def print_process(self, folder, output):
         print("processing '{}' to '{}'".format(folder, output))
+    def print_compare(self, aprofile, bprofile, path):
+        print("comparing  '{}' and '{}' to '{}'".format(aprofile, bprofile, path))
+    def print_report(self, path, output):
+        print("reporting  '{}' to '{}'".format(path, output))
 
 INIT_ERROR_STATE = -1
 if __name__ == "__main__":
