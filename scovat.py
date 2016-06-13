@@ -133,15 +133,35 @@ class ScovatScript:
         for profile in profiles:
             # Find the sets of (un)matched files.
             profile_files = set(os.listdir(profile))
-            unmatched = profile_files - set(result_files)
+            runmatched = profile_files - set(result_files)
+            lunmatched = set(result_files) - profile_files
             matched = profile_files & set(result_files)
 
-            # Unmatched set of files.
-            for uprofile in unmatched:
-                uprofile_path = os.path.join(profile, uprofile)
-                self.print_copy(uprofile_path, output)
-                shutil.copy(uprofile_path, output)
-            result_files.extend(unmatched)
+            # Right unmatched profiles.
+            for ruprofile in runmatched:
+                output_path = os.path.join(output, ruprofile)
+                ruprofile_path = os.path.join(profile, ruprofile)
+                self.print_copy(ruprofile_path, output)
+                shutil.copy(ruprofile_path, output)
+                if operation == self.difference or\
+                   operation == self.intersection:
+                    self.print_process(output_path, output_path)
+                    ruprofile_transform = self.Transform()
+                    ruprofile_transform.read(output_path)
+                    ruprofile_transform.identity() # Zero.
+                    ruprofile_transform.write(output_path)
+            result_files.extend(runmatched)
+
+            # Left unmatched profiles.
+            for luprofile in lunmatched:
+                output_path = os.path.join(output, luprofile)
+                luprofile_path = os.path.join(profile, luprofile)
+                if  operation == self.intersection:
+                    self.print_process(output_path, output_path)
+                    luprofile_transform = self.Transform()
+                    luprofile_transform.read(output_path)
+                    luprofile_transform.identity() # Zero.
+                    luprofile_transform.write(output_path)
 
             # Matched set of files.
             for mprofile in matched:
@@ -191,10 +211,11 @@ class ScovatScript:
                 for s in xrange(len(afile.statements)):
                     statement(afile.statements[s],
                               bfile.statements[s])
+            else: self.file_identity(aprof.files[name])
         for name in bprof.files:
             if name not in aprof.files:
                 aprof.files[name] = bprof.files[name]
-                self.identity_transform(aprof)
+                self.file_identity(aprof.files[name])
 
     def difference(self, aprof, bprof):
         def function(a, b):
@@ -223,8 +244,7 @@ class ScovatScript:
         for name in bprof.files:
             if name not in aprof.files:
                 aprof.files[name] = bprof.files[name]
-                self.identity_transform(aprof)
-
+                self.file_identity(aprof.files[name])
 
     def union(self, aprof, bprof):
         def function(a, b):
@@ -299,6 +319,10 @@ class ScovatScript:
                     for f in profile.functions: handle.write("function:{},{},{}\n".format(f.line, f.count, f.name))
                     for b in profile.branches: handle.write("branch:{},{}\n".format(b.line, b.btype))
                     for s in profile.statements: handle.write("lcount:{},{}\n".format(s.line, s.count))
+        def file_identity(self, profile):
+            for f in profile.functions: f.count = 0
+            for b in profile.branches: b.btype = "notexec"
+            for s in profile.statements: s.count = 0
         def identity(self):
             for name in self.files:
                 for f in self.files[name].functions: f.count = 0
