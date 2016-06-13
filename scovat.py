@@ -125,7 +125,7 @@ class ScovatScript:
         self.print_copy(result, output)
         if not os.path.exists(output):
             os.makedirs(output)
-        # Copy first profile to output directory.
+        # Copy first profile to the output directory.
         [shutil.copy(os.path.join(result, f), output)
                      for f in result_files]
         del profiles[0] # Already processed.
@@ -136,136 +136,122 @@ class ScovatScript:
             unmatched = profile_files - set(result_files)
             matched = profile_files & set(result_files)
 
-            # Just copy unmatched.
+            # Unmatched set of files.
             for uprofile in unmatched:
                 uprofile_path = os.path.join(profile, uprofile)
                 self.print_copy(uprofile_path, output)
                 shutil.copy(uprofile_path, output)
-                identity_op = ((operation == self.difference)\
-                          or (operation == self.intersection))
-                if identity_op: # Check if we need to clear counter.
-                    output_path = os.path.join(output, uprofile)
-                    self.print_process(output_path, output_path)
-                    utransform = self.read_transform(uprofile_path)
-                    self.identity_transform(utransform) # Zero cnt.
-                    self.write_transform(utransform, output_path)
             result_files.extend(unmatched)
 
-            # Process any matched.
+            # Matched set of files.
             for mprofile in matched:
                 output_path = os.path.join(output, mprofile)
                 profile_path = os.path.join(profile, mprofile)
                 self.print_process(profile_path, output_path)
                 (a, b) = (output_path, profile_path)
-                atransform = self.read_transform(a)
-                btransform = self.read_transform(b)
-                operation(atransform, btransform)
-                # Results overwrite the 'a' profile.
-                self.write_transform(atransform, a)
-
-    def intersection_function(self, a, b):
-        if a.count == 0 or\
-           b.count == 0:
-            a.count = 0
-        else: a.count += b.count
-
-    def intersection_branch(self, a, b):
-        if a.btype == "taken" and\
-           b.btype == "taken":
-            a.btype = "taken"
-        elif (a.btype == "taken" and\
-              b.btype == "nottaken") or\
-             (a.btype == "nottaken" and\
-              b.btype == "taken") or\
-             (a.btype == "nottaken" and \
-              b.btype == "nottaken"):
-            a.btype = "nottaken"
-        else: a.btype = "notexec"
-
-    def intersection_statement(self, a, b):
-        if a.count == 0 or\
-           b.count == 0:
-            a.count = 0
-        else: a.count += b.count
+                (at, bt) = (self.Transform(), self.Transform())
+                at.read(a) ; bt.read(b) # Parse profile data.
+                operation(at, bt) # Apply operations on them.
+                at.write(a) # Overwrite profile data on disk.
 
     def intersection(self, aprof, bprof):
+        def function(a, b):
+            if a.count == 0 or\
+               b.count == 0:
+                a.count = 0
+            else: a.count += b.count
+        def branch(a, b):
+            if a.btype == "taken" and\
+               b.btype == "taken":
+                a.btype = "taken"
+            elif (a.btype == "taken" and\
+                  b.btype == "nottaken") or\
+                 (a.btype == "nottaken" and\
+                  b.btype == "taken") or\
+                 (a.btype == "nottaken" and \
+                  b.btype == "nottaken"):
+                  a.btype = "nottaken"
+            else: a.btype = "notexec"
+        def statement(a, b):
+            if a.count == 0 or\
+               b.count == 0:
+                a.count = 0
+            else: a.count += b.count
+
         for name in aprof.files:
             afile = aprof.files[name]
             if name in bprof.files:
                 bfile = bprof.files[name]
                 for f in xrange(len(afile.functions)):
-                    self.intersection_function(afile.functions[f],
-                                               bfile.functions[f])
+                    function(afile.functions[f],
+                             bfile.functions[f])
                 for b in xrange(len(afile.branches)):
-                    self.intersection_branch(afile.branches[b],
-                                             bfile.branches[b])
+                    branch(afile.branches[b],
+                           bfile.branches[b])
                 for s in xrange(len(afile.statements)):
-                    self.intersection_statement(afile.statements[s],
-                                                bfile.statements[s])
+                    statement(afile.statements[s],
+                              bfile.statements[s])
         for name in bprof.files:
             if name not in aprof.files:
                 aprof.files[name] = bprof.files[name]
                 self.identity_transform(aprof)
-
-    def difference_function(self, a, b):
-        if b.count != 0:
-            a.count = 0
-
-    def difference_branch(self, a, b):
-        if a.btype == b.btype:
-            a.btype = "notexec"
-
-    def difference_statement(self, a, b):
-        if b.count != 0:
-            a.count = 0
 
     def difference(self, aprof, bprof):
+        def function(a, b):
+            if b.count != 0:
+                a.count = 0
+        def branch(a, b):
+            if a.btype == b.btype:
+                a.btype = "notexec"
+        def statement(a, b):
+            if b.count != 0:
+                a.count = 0
+
         for name in aprof.files:
             afile = aprof.files[name]
             if name in bprof.files:
                 bfile = bprof.files[name]
                 for f in xrange(len(afile.functions)):
-                    self.difference_function(afile.functions[f],
-                                             bfile.functions[f])
+                    function(afile.functions[f],
+                             bfile.functions[f])
                 for b in xrange(len(afile.branches)):
-                    self.difference_branch(afile.branches[b],
-                                           bfile.branches[b])
+                    branch(afile.branches[b],
+                           bfile.branches[b])
                 for s in xrange(len(afile.statements)):
-                    self.difference_statement(afile.statements[s],
-                                              bfile.statements[s])
+                    statement(afile.statements[s],
+                              bfile.statements[s])
         for name in bprof.files:
             if name not in aprof.files:
                 aprof.files[name] = bprof.files[name]
                 self.identity_transform(aprof)
 
-    def union_function(self, a, b):
-        a.count += b.count
-
-    def union_branch(self, a, b):
-        if a.btype == "taken" or\
-           b.btype == "taken":
-           a.btype = "taken"
-        elif a.btype == "nottaken" or\
-             b.btype == "nottaken":
-            a.btype = "nottaken"
-
-    def union_statement(self, a, b):
-        a.count += b.count
 
     def union(self, aprof, bprof):
+        def function(a, b):
+            a.count += b.count
+        def branch(a, b):
+            if a.btype == "taken" or\
+               b.btype == "taken":
+                a.btype = "taken"
+            elif a.btype == "nottaken" or\
+                 b.btype == "nottaken":
+                a.btype = "nottaken"
+        def statement(a, b):
+            a.count += b.count
+
         for name in aprof.files:
             afile = aprof.files[name]
             if name in bprof.files:
                 bfile = bprof.files[name]
                 for f in xrange(len(afile.functions)):
-                    self.union_function(afile.functions[f],
-                                        bfile.functions[f])
+                    function(afile.functions[f],
+                             bfile.functions[f])
                 for b in xrange(len(afile.branches)):
-                    self.union_branch(afile.branches[b],
-                                      bfile.branches[b])
+                    branch(afile.branches[b],
+                           bfile.branches[b])
                 for s in xrange(len(afile.statements)):
-                    self.union_statement(afile.statements[s],
-                                         bfile.statements[s])
+                    statement(afile.statements[s],
+                              bfile.statements[s])
         for name in bprof.files:
             if name not in aprof.files:
                 aprof.files[name] = bprof.files[name]
@@ -297,90 +283,73 @@ class ScovatScript:
         def __init__(self):
             self.files = {}
 
-    def identity_transform(self, prof):
-        for name in prof.files:
-            for f in prof.files[name].functions: f.count = 0
-            for b in prof.files[name].branches: b.btype = "notexec"
-            for s in prof.files[name].statements: s.count = 0
-
-    def read_transform(self, path):
-        with open(path, "r+b") as handle:
-            # Map all file contents into memory.
-            data = mmap.mmap(handle.fileno(), 0,
-                            prot=mmap.PROT_READ)
-            # Parse intermediate representation.
-            parsed = self.parse_transform(data)
-            handle.close() # Data already here.
-            return parsed # Transform data.
-
-    def write_transform(self, data, output):
-        with open(output, "w") as profile:
-            for i in data.files:
-                p = data.files[i]
-                profile.write("file:{}\n".format(p.name))
-                for f in p.functions: profile.write("function:{},{},{}\n".format(f.line, f.count, f.name))
-                for b in p.branches: profile.write("branch:{},{}\n".format(b.line, b.btype))
-                for s in p.statements: profile.write("lcount:{},{}\n".format(s.line, s.count))
-
-    def parse_transform(self, data):
-        result = self.Transform()
-        for line in iter(data.readline, ""):
-            contents = line.split(":")
-            content = contents[1].rstrip("\r\n")
-            token = contents[0]
-            if token == "file":
-                result.files[content] = self.Transform.File(content)
-                current_file = result.files[content] # Optimize this later?
-            else: # Strip according to the common delimiter, then handle token.
-                content = content.split(",") # Might want to handle the case when arguments don't match a certain int type cast?
-                if token == "lcount": current_file.statements.append(self.Transform.Statement(int(content[0]), int(content[1])))
-                elif token == "branch": current_file.branches.append(self.Transform.Branch(int(content[0]), content[1]))
-                elif token == "function": current_file.functions.append(self.Transform.Function(int(content[0]), int(content[1]), content[2]))
-        return result
+        def read(self, path):
+            with open(path, "r+b") as handle:
+                # Map all file contents into memory.
+                data = mmap.mmap(handle.fileno(), 0,
+                                prot=mmap.PROT_READ)
+                # Parse intermediate representation.
+                self.parse(data) # Optimize looping?
+                handle.close() # Data already here.
+        def write(self, path):
+            with open(path, "w") as handle:
+                for name in self.files:
+                    profile = self.files[name]
+                    handle.write("file:{}\n".format(profile.name))
+                    for f in profile.functions: handle.write("function:{},{},{}\n".format(f.line, f.count, f.name))
+                    for b in profile.branches: handle.write("branch:{},{}\n".format(b.line, b.btype))
+                    for s in profile.statements: handle.write("lcount:{},{}\n".format(s.line, s.count))
+        def identity(self):
+            for name in self.files:
+                for f in self.files[name].functions: f.count = 0
+                for b in self.files[name].branches: b.btype = "notexec"
+                for s in self.files[name].statements: s.count = 0
+        def parse(self, data):
+            for line in iter(data.readline, ""):
+                contents = line.split(":")
+                content = contents[1].rstrip("\r\n")
+                token = contents[0]
+                if token == "file":
+                    self.files[content] = self.File(content)
+                    current_file = self.files[content] # Optimize this later?
+                else: # Strip according to the common delimiter, then handle token.
+                    content = content.split(",") # Might want to handle the case when arguments don't match a certain int type cast?
+                    if token == "lcount": current_file.statements.append(self.Statement(int(content[0]), int(content[1])))
+                    elif token == "branch": current_file.branches.append(self.Branch(int(content[0]), content[1]))
+                    elif token == "function": current_file.functions.append(self.Function(int(content[0]), int(content[1]), content[2]))
 
     class Analysis:
         class File:
             def __init__(self, name):
                 self.name = name
-                self.branches = 0
-                self.total_branches = 0
-                self.branch_distance = 0
-                self.statements = 0
-                self.total_statements = 0
-                self.statement_distance = 0
-                self.functions = 0
-                self.total_function = 0
-                self.function_distance = 0
+                self.branches = (0, 0)
+                self.statements = (0, 0)
+                self.functions = (0, 0)
+                self.hamming = (0, 0, 0)
+                self.jaccard = (0, 0, 0)
         def __init__(self):
             self.files = {}
-            self.branches = 0
-            self.total_branches = 0
-            self.branch_distance = 0
-            self.statements = 0
-            self.total_statements = 0
-            self.statement_distance = 0
-            self.functions = 0
-            self.total_function = 0
-            self.function_distance = 0
-
-    def write_analysis(self, data, output):
-        with open(output, "w") as profile:
-            for i in data.files:
-                p = data.files[i]
-                profile.write("file:{}\n".format(p.name))
-                profile.write("functions:{},{},{0:.2f}\n".format(p.functions,
-                                                                 p.total_functions,
-                                                                 p.functions / p.total_functions))
-                profile.write("branches:{},{},{0:.2f}\n".format(p.branches,
-                                                                p.total_branches,
-                                                                p.branches / p.total_branches))
-                profile.write("statements:{},{},{0:.2f}\n".format(p.statements,
-                                                                  p.total_statements,
-                                                                  p.statements / p.total_statements))
-                profile.write("hamming:{},{},{}\n".format(42, 42, 42))
-                profile.write("jaccard:{},{},{}\n".format(42, 42, 42))
-
-    def parse_analysis(self, data): pass
+            self.branches = (0, 0)
+            self.statements = (0, 0)
+            self.functions = (0, 0)
+            self.hamming = (0, 0, 0)
+            self.jaccard = (0, 0, 0)
+        def write(self, path):
+            with open(path, "w") as handle:
+                for name in self.files:
+                    profile = self.files[name]
+                    handle.write("file:{}\n".format(profile.name))
+                    handle.write("functions:{},{},{0:.2f}\n".format(profile.functions[0],
+                                                                    profile.functions[1],
+                                                                    profile.functions[0] / profile.functions[1]))
+                    handle.write("branches:{},{},{0:.2f}\n".format(profile.branches[0],
+                                                                   profile.branches[1],
+                                                                   profile.branches[0] / profile.branches[1]))
+                    handle.write("statements:{},{},{0:.2f}\n".format(profile.statements[0],
+                                                                     profile.statements[1],
+                                                                     profile.statements[0] / profile.statements[1]))
+                    handle.write("hamming:{},{},{}\n".format(profile.hamming[0], profile.hamming[1], profile.hamming[2]))
+                    handle.write("jaccard:{},{},{}\n".format(profile.jaccard[0], profile.jaccard[1], profile.jaccard[2]))
 
     def print_crawl(self, folder):
         print("crawling '{}'".format(folder))
