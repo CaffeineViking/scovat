@@ -123,7 +123,6 @@ class ScovatScript:
         devnull = open(os.devnull, 'w')
         result_files = os.listdir(result)
         self.print_copy(result, output)
-
         if not os.path.exists(output):
             os.makedirs(output)
         # Copy first profile to output directory.
@@ -142,6 +141,14 @@ class ScovatScript:
                 uprofile_path = os.path.join(profile, uprofile)
                 self.print_copy(uprofile_path, output)
                 shutil.copy(uprofile_path, output)
+                identity_op = ((operation == self.difference)\
+                          or (operation == self.intersection))
+                if identity_op: # Check if we need to clear counter.
+                    output_path = os.path.join(output, uprofile)
+                    self.print_process(output_path, output_path)
+                    utransform = self.read_transform(uprofile_path)
+                    self.identity_transform(utransform) # Zero cnt.
+                    self.write_transform(utransform, output_path)
             result_files.extend(unmatched)
 
             # Process any matched.
@@ -150,21 +157,11 @@ class ScovatScript:
                 profile_path = os.path.join(profile, mprofile)
                 self.print_process(profile_path, output_path)
                 (a, b) = (output_path, profile_path)
-                with open(a, "r+b") as afile,\
-                     open(b, "r+b") as bfile:
-                    # Map all file contents into memory.
-                    adata = mmap.mmap(afile.fileno(), 0,
-                                    prot=mmap.PROT_READ)
-                    bdata = mmap.mmap(bfile.fileno(), 0,
-                                    prot=mmap.PROT_READ)
-                    # Parse intermediate representations.
-                    aparsed = self.parse_transform(adata)
-                    bparsed = self.parse_transform(bdata)
-                    # Don't need these anymore, yay!
-                    bdata.close() ; adata.close()
-                    operation(aparsed, bparsed) # Go!
-                    # Results overwrite the 'a' profile.
-                    self.write_transform(aparsed, a)
+                atransform = self.read_transform(a)
+                btransform = self.read_transform(b)
+                operation(atransform, btransform)
+                # Results overwrite the 'a' profile.
+                self.write_transform(atransform, a)
 
     def intersection_function(self, a, b):
         if a.count == 0 or\
@@ -208,12 +205,7 @@ class ScovatScript:
         for name in bprof.files:
             if name not in aprof.files:
                 aprof.files[name] = bprof.files[name]
-                for f in aprof.files[name].functions:
-                    f.count = 0
-                for b in aprof.files[name].branches:
-                    b.btype = "notexec"
-                for s in aprof.files[name].statements:
-                    s.count = 0
+                self.identity_transform(aprof)
 
     def difference_function(self, a, b):
         if b.count != 0:
@@ -244,12 +236,7 @@ class ScovatScript:
         for name in bprof.files:
             if name not in aprof.files:
                 aprof.files[name] = bprof.files[name]
-                for f in aprof.files[name].functions:
-                    f.count = 0
-                for b in aprof.files[name].branches:
-                    b.btype = "notexec"
-                for s in aprof.files[name].statements:
-                    s.count = 0
+                self.identity_transform(aprof)
 
     def union_function(self, a, b):
         a.count += b.count
@@ -309,6 +296,22 @@ class ScovatScript:
                 self.name = name
         def __init__(self):
             self.files = {}
+
+    def identity_transform(self, prof):
+        for name in prof.files:
+            for f in prof.files[name].functions: f.count = 0
+            for b in prof.files[name].branches: b.btype = "notexec"
+            for s in prof.files[name].statements: s.count = 0
+
+    def read_transform(self, path):
+        with open(path, "r+b") as handle:
+            # Map all file contents into memory.
+            data = mmap.mmap(handle.fileno(), 0,
+                            prot=mmap.PROT_READ)
+            # Parse intermediate representation.
+            parsed = self.parse_transform(data)
+            handle.close() # Data already here.
+            return parsed # Transform data.
 
     def write_transform(self, data, output):
         with open(output, "w") as profile:
