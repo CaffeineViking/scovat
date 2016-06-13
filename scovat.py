@@ -211,11 +211,11 @@ class ScovatScript:
                 for s in xrange(len(afile.statements)):
                     statement(afile.statements[s],
                               bfile.statements[s])
-            else: self.file_identity(aprof.files[name])
+            else: aprof.file_identity(name)
         for name in bprof.files:
             if name not in aprof.files:
                 aprof.files[name] = bprof.files[name]
-                self.file_identity(aprof.files[name])
+                aprof.file_identity(name)
 
     def difference(self, aprof, bprof):
         def function(a, b):
@@ -244,7 +244,7 @@ class ScovatScript:
         for name in bprof.files:
             if name not in aprof.files:
                 aprof.files[name] = bprof.files[name]
-                self.file_identity(aprof.files[name])
+                aprof.file_identity(name)
 
     def union(self, aprof, bprof):
         def function(a, b):
@@ -319,10 +319,10 @@ class ScovatScript:
                     for f in profile.functions: handle.write("function:{},{},{}\n".format(f.line, f.count, f.name))
                     for b in profile.branches: handle.write("branch:{},{}\n".format(b.line, b.btype))
                     for s in profile.statements: handle.write("lcount:{},{}\n".format(s.line, s.count))
-        def file_identity(self, profile):
-            for f in profile.functions: f.count = 0
-            for b in profile.branches: b.btype = "notexec"
-            for s in profile.statements: s.count = 0
+        def file_identity(self, name):
+            for f in self.files[name].functions: f.count = 0
+            for b in self.files[name].branches: b.btype = "notexec"
+            for s in self.files[name].statements: s.count = 0
         def identity(self):
             for name in self.files:
                 for f in self.files[name].functions: f.count = 0
@@ -376,11 +376,11 @@ class ScovatScript:
                     handle.write("jaccard:{},{},{}\n".format(profile.jaccard[0], profile.jaccard[1], profile.jaccard[2]))
 
     def print_crawl(self, folder):
-        print("crawling '{}'".format(folder))
+        print("crawling   '{}'".format(folder))
     def print_copy(self, origin, destination):
-        print("copying '{}' to '{}'".format(origin, destination))
+        print("copying    '{}' to '{}'".format(origin, destination))
     def print_remove(self, path):
-        print("removing '{}'".format(path))
+        print("removing   '{}'".format(path))
     def print_process(self, folder, output):
         print("processing '{}' to '{}'".format(folder, output))
 
