@@ -122,7 +122,7 @@ class ScovatScript:
             anchor_transform = self.Transform()
             anchor_transform.read(anchor_path)
             analysis = self.Analysis()
-            analysis.process(anchor_transform)
+            analysis.process(anchor_transform, 0)
             analysis.write(output_path)
 
         for ruprofile in runmatched:
@@ -131,7 +131,7 @@ class ScovatScript:
             output_transform = self.Transform()
             output_transform.read(output_path)
             analysis = self.Analysis()
-            analysis.process(output_transform)
+            analysis.process(output_transform, 1)
             analysis.write(output_path)
 
         for mprofile in matched:
@@ -144,6 +144,26 @@ class ScovatScript:
             analysis = self.Analysis() # Results from it.
             analysis.compare(at, bt) # Hamming, Jaccard.
             analysis.write(output_path) # Overwrite tmp.
+
+        print("==============ANALYSIS==============")
+        if analysis.functions[1] > 0:
+            print("function coverage ratio: {:.2f}%".format(float(analysis.functions[0]) / float(analysis.functions[1]) * 100))
+            if analysis.jaccard[0][1] > 0:
+                jaccard = float(analysis.jaccard[0][0]) / float(analysis.jaccard[0][1])
+                print("function jaccard coefficient: {:.2f}".format(jaccard))
+            print("function hamming distance: {}".format(analysis.hamming[0]))
+        if analysis.branches[1] > 0:
+            print("branch coverage: {:.2f}%".format(float(analysis.branches[0]) / float(analysis.branches[1]) * 100))
+            if analysis.jaccard[1][1] > 0:
+                jaccard = float(analysis.jaccard[1][0]) / float(analysis.jaccard[1][1])
+                print("branch jaccard coefficient: {:.2f}".format(jaccard))
+            print("branch hamming distance: {}".format(analysis.hamming[1]))
+        if analysis.statements[1] > 0:
+            print("statement coverage: {:.2f}%".format(float(analysis.statements[0]) / float(analysis.statements[1]) * 100))
+            if analysis.jaccard[2][1] > 0:
+                jaccard = float(analysis.jaccard[2][0]) / float(analysis.jaccard[2][1])
+                print("statement jaccard coefficient: {:.2f}".format(jaccard))
+            print("statement hamming distance: {}".format(analysis.hamming[2]))
 
     def transform(self, output, inputs, operation):
         profiles = inputs
@@ -375,33 +395,32 @@ class ScovatScript:
                 self.functions = [0, 0]
                 self.hamming = [0, 0, 0]
                 self.jaccard = [0, 0, 0]
-        branches = [0, 0]
-        statements = [0, 0]
-        functions = [0, 0]
-        hamming = [0, 0, 0]
-        jaccard = [0, 0, 0]
+        branches = [0, 0] # (branches hit, total branches)
+        statements = [0, 0] # (statements hit, total statements)
+        functions = [0, 0] # (functions hit, total functions)
+        hamming = [0, 0, 0] # (function, branch, statement)
+        jaccard = [[0, 0], # (function, branch, statement)
+                   [0, 0], # then for each, the following:
+                   [0, 0]] # (intersected hits, union hit)
         def __init__(self):
             self.files = {}
 
-        def process(self, transform):
+        def process(self, transform, side):
             for name in transform.files:
                 profile = transform.files[name]
                 self.files[name] = self.File(name)
                 p = self.files[name] # For easy access.
 
-                self.functions[1] += len(profile.functions)
                 p.functions[1] = len(profile.functions)
                 for f in profile.functions:
                     if f.count > 0:
                         p.functions[0] += 1
                 p.hamming[0] = p.functions[0]
-                self.branches[1] += len(profile.branches)
                 p.branches[1] = len(profile.branches)
                 for b in profile.branches:
                     if b.btype == "taken":
                         p.branches[0] += 1
                 p.hamming[1] = p.branches[0]
-                self.statements[1] += len(profile.statements)
                 p.statements[1] = len(profile.statements)
                 for s in profile.statements:
                     if s.count > 0:
@@ -409,7 +428,76 @@ class ScovatScript:
                 p.hamming[2] = p.statements[0]
                 p.jaccard = [0.0, 0.0, 0.0]
 
-        def compare(self, a, b): pass
+                self.jaccard[0][side] += p.functions[0]
+                self.jaccard[1][side] += p.branches[0]
+                self.jaccard[2][side] += p.statements[0]
+                self.functions[1] += len(profile.functions)
+                self.functions[0] += p.functions[0]
+                self.branches[1] += len(profile.branches)
+                self.branches[0] += p.branches[0]
+                self.statements[1] += len(profile.statements)
+                self.statements[0] += p.statements[0]
+                self.hamming[0] += p.hamming[0]
+                self.hamming[1] += p.hamming[1]
+                self.hamming[2] += p.hamming[2]
+
+        def compare(self, a, b):
+            for name in a.files:
+                aprofile = a.files[name]
+                if name in b.files:
+                    bprofile = b.files[name]
+                    self.files[name] = self.File(name)
+                    p = self.files[name] # Easy access.
+
+                    jaccard_hits = 0
+                    p.functions[1] = len(aprofile.functions)
+                    for f in xrange(len(aprofile.functions)):
+                        ahit = aprofile.functions[f].count > 0
+                        bhit = bprofile.functions[f].count > 0
+                        if ahit and bhit: jaccard_hits += 1
+                        if ahit or bhit: p.functions[0] += 1
+                        if ahit != bhit: p.hamming[0] += 1
+                    if p.functions[0] > 0:
+                        p.jaccard[0] = float(jaccard_hits) / float(p.functions[0])
+                        self.jaccard[0][1] += p.functions[0]
+                        self.jaccard[0][0] += jaccard_hits
+
+                    jaccard_hits = 0
+                    p.branches[1] = len(aprofile.branches)
+                    for b in xrange(len(aprofile.branches)):
+                        ahit = aprofile.branches[b].btype == "taken"
+                        bhit = bprofile.branches[b].btype == "taken"
+                        if ahit and bhit: jaccard_hits += 1
+                        if ahit or bhit: p.branches[0] += 1
+                        if ahit != bhit: p.hamming[1] += 1
+                    if p.branches[0] > 0:
+                        p.jaccard[1] = float(jaccard_hits) / float(p.branches[0])
+                        self.jaccard[1][1] += p.branches[0]
+                        self.jaccard[1][0] += jaccard_hits
+
+                    jaccard_hits = 0 # New trendy summer hits!
+                    p.statements[1] = len(aprofile.statements)
+                    for s in xrange(len(aprofile.statements)):
+                        ahit = aprofile.statements[s].count > 0
+                        bhit = bprofile.statements[s].count > 0
+                        if ahit and bhit: jaccard_hits += 1
+                        if ahit or bhit: p.statements[0] += 1
+                        if ahit != bhit: p.hamming[2] += 1
+                    if p.statements[0] > 0:
+                        p.jaccard[2] = float(jaccard_hits) / float(p.statements[0])
+                        self.jaccard[2][1] += p.statements[0]
+                        self.jaccard[2][0] += jaccard_hits
+
+                    self.functions[1] += len(aprofile.functions)
+                    self.functions[0] += p.functions[0]
+                    self.branches[1] += len(aprofile.branches)
+                    self.branches[0] += p.branches[0]
+                    self.statements[1] += len(aprofile.statements)
+                    self.statements[0] += p.statements[0]
+                    self.hamming[0] += p.hamming[0]
+                    self.hamming[1] += p.hamming[1]
+                    self.hamming[2] += p.hamming[2]
+
         def write(self, path):
             with open(path, "w") as handle:
                 for name in self.files:
