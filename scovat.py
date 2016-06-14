@@ -14,6 +14,15 @@ class ScovatScript:
     GCOV = "gcov" # Location where the 'gcov -ib' can be found.
     USAGE = "(-gb BUILD | -i | -d | -u | -r) -o OUT IN [IN...]"
     DESCRIPTION = """
+    Set Coverage Analysis Tool's (S.C.O.V.A.T) primary purpose is to transform,
+    analyze and report a provided set of coverage profiles with the gcov 'gcda'
+    file format by first generating an intermediate 'gcov' representation which
+    can be used to apply 'set union, intersection or difference' on n profiles.
+    Analyzing these results will give the code coverage metrics of the criteria
+    which are supplied by gcov (statement, branch and function), which can then
+    process the 'Hamming distance' and 'Jacard index', of two or more profiles.
+    Note: if two or more profiles are given for comparison, union will be used.
+    Interesting: scovat closely spells like one Romanian sweet pancake dessert.
     """
 
     def __init__(self):
@@ -24,22 +33,39 @@ class ScovatScript:
         option = parser.add_argument
 
         operation("-g", "--generate", dest="generate", action="store_true",
-                  help="""""")
+                  help="""executes 'SCOVAT_GCOV' on all the profiles provided
+                          with 'IN' and the reference 'BUILD' directory, such
+                          that all '*.gcda' files use 'intermediate' formats.
+                          Profiles stored in 'OUT', which can be operated on.""")
         operation("-i", "--intersection", dest="intersection", action="store_true",
-                  help="""""")
+                  help="""applies the 'set intersection' operation on all the
+                          'IN' profiles, producing the result profiles 'OUT'.""")
         operation("-d", "--difference", dest="difference", action="store_true",
-                  help="""""")
+                  help="""applies the 'left set difference' operation upon an
+                          'IN' set of profiles, with 'IN[0]' as the left set.
+                          Produces another profile 'OUT' with operation data.""")
         operation("-u", "--union", dest="union", action="store_true",
-                  help="""""")
+                  help="""applies the simple 'set union' operation on all the
+                          'IN' profiles given, then storing results in 'OUT'.
+                          All operations transform the set criteria counters.""")
         operation("-a", "--analyze", dest="analyze", action="store_true",
-                  help="""""")
+                  help="""produces the coverage report with statement, branch
+                          and function criteria percentages of the 'union' of
+                          all 'IN' profiles, with 'IN[0]' as the given anchor
+                          which is used to, if '|IN| > 1' to also generate an
+                          analysis, with the Hamming distance and the Jaccard
+                          similarity coefficient between the anchor and rest.
+                          Similarities use 'criteria hit' as the set element.""")
 
         option("-o", "--output", dest="output", metavar="OUT", required=True,
-                help="""""")
+                help="""generic 'OUTPUT' directory for resulting operation.""")
         option("-b", "--build", dest="build", metavar="DIR",
-               help="""""")
+               help="""matching 'BUILD' directory where profile was built.""")
         option("inputs", metavar="IN", nargs="+",
-               help="""""")
+               help="""list of testing profiles that are to be operated on.
+                       Usually several test cases which are to be analyzed.
+                       These *need* to match the path structure of 'BUILD',
+                       at least when generating base intermediate profiles.""")
         self.options = parser.parse_args()
         self.GCOV = os.getenv("SCOVAT_GCOV", self.GCOV)
         # Check that 'generate' always has 'build' and v.v.
@@ -441,11 +467,11 @@ class ScovatScript:
                 self.hamming[1] += p.hamming[1]
                 self.hamming[2] += p.hamming[2]
 
-        def compare(self, a, b):
-            for name in a.files:
-                aprofile = a.files[name]
-                if name in b.files:
-                    bprofile = b.files[name]
+        def compare(self, af, bf):
+            for name in af.files:
+                aprofile = af.files[name]
+                if name in bf.files:
+                    bprofile = bf.files[name]
                     self.files[name] = self.File(name)
                     p = self.files[name] # Easy access.
 
@@ -497,6 +523,7 @@ class ScovatScript:
                     self.hamming[0] += p.hamming[0]
                     self.hamming[1] += p.hamming[1]
                     self.hamming[2] += p.hamming[2]
+                else: print("UNMATCHED PROFILE OK?")
 
         def write(self, path):
             with open(path, "w") as handle:
