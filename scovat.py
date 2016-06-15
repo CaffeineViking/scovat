@@ -128,9 +128,9 @@ class ScovatScript:
     def analyze(self, output, inputs):
         profiles = inputs ; profile_anchor = profiles[0]
         if len(profiles) != 1: self.transform(output, profiles[1:], self.union)
-        else: shutil.rmtree(output, ignore_errors=True)
-        # After this, only two profiles, A and B exists. Only if several files.
-        # Where B is 'union' of them, except the anchor. Anchor isn't analyzed.
+        else: shutil.rmtree(output, ignore_errors=True) # Remove existing path.
+        # After this, only two profiles, A and B exists. Only if given n files,
+        # where B is 'union' of them, except the anchor. Anchor isn't analyzed.
         if not os.path.exists(output):
             os.makedirs(output)
 
@@ -163,7 +163,7 @@ class ScovatScript:
         for mprofile in matched:
             output_path = os.path.join(output, mprofile)
             anchor_path = os.path.join(profile_anchor, mprofile)
-            self.print_compare(anchor_path, output_path, output_path)
+            self.print_compare(anchor_path, output_path)
             (a, b) = (output_path, anchor_path)
             (at, bt) = (self.Transform(), self.Transform())
             at.read(a) ; bt.read(b) # Parse profile data.
@@ -177,19 +177,19 @@ class ScovatScript:
             if analysis.jaccard[0][1] > 0:
                 jaccard = float(analysis.jaccard[0][0]) / float(analysis.jaccard[0][1])
                 print("function jaccard coefficient: {:.2f}".format(jaccard))
-            print("function hamming distance: {}".format(analysis.hamming[0]))
+            if len(profiles) > 1: print("function hamming distance: {}".format(analysis.hamming[0]))
         if analysis.branches[1] > 0:
             print("branch coverage: {:.2f}%".format(float(analysis.branches[0]) / float(analysis.branches[1]) * 100))
             if analysis.jaccard[1][1] > 0:
                 jaccard = float(analysis.jaccard[1][0]) / float(analysis.jaccard[1][1])
                 print("branch jaccard coefficient: {:.2f}".format(jaccard))
-            print("branch hamming distance: {}".format(analysis.hamming[1]))
+            if len(profiles) > 1: print("branch hamming distance: {}".format(analysis.hamming[1]))
         if analysis.statements[1] > 0:
             print("statement coverage: {:.2f}%".format(float(analysis.statements[0]) / float(analysis.statements[1]) * 100))
             if analysis.jaccard[2][1] > 0:
                 jaccard = float(analysis.jaccard[2][0]) / float(analysis.jaccard[2][1])
                 print("statement jaccard coefficient: {:.2f}".format(jaccard))
-            print("statement hamming distance: {}".format(analysis.hamming[2]))
+            if len(profiles) > 1: print("statement hamming distance: {}".format(analysis.hamming[2]))
 
     def transform(self, output, inputs, operation):
         profiles = inputs
@@ -236,6 +236,7 @@ class ScovatScript:
                     luprofile_transform.read(output_path)
                     luprofile_transform.identity() # Zero.
                     luprofile_transform.write(output_path)
+            # Doesn't need to extend, already in output.
 
             # Matched set of files.
             for mprofile in matched:
@@ -523,19 +524,22 @@ class ScovatScript:
                     self.hamming[0] += p.hamming[0]
                     self.hamming[1] += p.hamming[1]
                     self.hamming[2] += p.hamming[2]
-                else: print("UNMATCHED PROFILE OK?")
+                else: print("SHOULDN'T HAPPEN?!?!")
 
         def write(self, path):
             with open(path, "w") as handle:
                 for name in self.files:
                     profile = self.files[name]
                     handle.write("analysis:{}\n".format(profile.name))
-                    if profile.functions[1] > 0: handle.write("functions:{},{},{:.2f}%\n".format(profile.functions[0], profile.functions[1],
-                                                              float(profile.functions[0]) / float(profile.functions[1]) * 100))
-                    if profile.branches[1] > 0: handle.write("branches:{},{},{:.2f}%\n".format(profile.branches[0], profile.branches[1],
-                                                             float(profile.branches[0]) / float(profile.branches[1]) * 100))
-                    if profile.statements[1] > 0: handle.write("statements:{},{},{:.2f}%\n".format(profile.statements[0], profile.statements[1],
-                                                               float(profile.statements[0]) / float(profile.statements[1]) * 100))
+                    if profile.functions[1] > 0:
+                        handle.write("functions:{},{},{:.2f}%\n".format(profile.functions[0], profile.functions[1],
+                                     float(profile.functions[0]) / float(profile.functions[1]) * 100))
+                    if profile.branches[1] > 0:
+                        handle.write("branches:{},{},{:.2f}%\n".format(profile.branches[0], profile.branches[1],
+                                     float(profile.branches[0]) / float(profile.branches[1]) * 100))
+                    if profile.statements[1] > 0:
+                        handle.write("statements:{},{},{:.2f}%\n".format(profile.statements[0], profile.statements[1],
+                                     float(profile.statements[0]) / float(profile.statements[1]) * 100))
                     handle.write("jaccard:{:.2f},{:.2f},{:.2f}\n".format(profile.jaccard[0], profile.jaccard[1], profile.jaccard[2]))
                     handle.write("hamming:{},{},{}\n".format(profile.hamming[0], profile.hamming[1], profile.hamming[2]))
 
@@ -545,8 +549,8 @@ class ScovatScript:
         print("copying    '{}' to '{}'".format(origin, destination))
     def print_process(self, folder, output):
         print("processing '{}' to '{}'".format(folder, output))
-    def print_compare(self, aprofile, bprofile, path):
-        print("comparing  '{}' and '{}' to '{}'".format(aprofile, bprofile, path))
+    def print_compare(self, aprofile, bprofile):
+        print("comparing  '{}' and '{}'".format(aprofile, bprofile))
     def print_report(self, path, output):
         print("reporting  '{}' to '{}'".format(path, output))
 
