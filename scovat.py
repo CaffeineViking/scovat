@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 #           scovat.py
 
+
 import os
 import sys
 import time
@@ -10,8 +11,9 @@ import fnmatch
 import argparse
 import subprocess
 
+
 class ScovatScript:
-    GCOV = "gcov" # Location where the 'gcov -ib' can be found.
+    GCOV = "gcov"  # Location where the 'gcov -ib' can be found.
     USAGE = "(-gb BUILD | -i | -d | -u | -r) -o OUT IN [IN...]"
     DESCRIPTION = """
     Set Coverage Analysis Tool's (S.C.O.V.A.T) primary purpose is to transform,
@@ -58,7 +60,7 @@ class ScovatScript:
                           Similarities use 'criteria hit' as the set element.""")
 
         option("-o", "--output", dest="output", metavar="OUT", required=True,
-                help="""generic 'OUTPUT' directory for resulting operation.""")
+               help="""generic 'OUTPUT' directory for resulting operation.""")
         option("-b", "--build", dest="build", metavar="DIR",
                help="""matching 'BUILD' directory where profile was built.""")
         option("inputs", metavar="IN", nargs="+",
@@ -74,18 +76,28 @@ class ScovatScript:
             parser.print_help()
             sys.exit(1)
 
-    def __enter__(self): return self
-    def __exit__(self, etype, value, etrace): pass
+    def __enter__(self):
+        return self
+
+    def __exit__(self, etype, value, etrace):
+        pass
+
     def execute(self, location=sys.argv[0]):
         begin = time.time()
         options = self.options
         # Only implicitly dependent argument is 'generate', it needs 'build' flag set.
-        if options.generate: self.generate(options.build, options.output, options.inputs)
-        elif options.intersection: self.transform(options.output, options.inputs, self.intersection)
-        elif options.difference: self.transform(options.output, options.inputs, self.difference)
-        elif options.union: self.transform(options.output, options.inputs, self.union)
-        elif options.analyze: self.analyze(options.output, options.inputs)
-        else: sys.exit(1) # Shouldn't really arrive here given argparse.
+        if options.generate:
+            self.generate(options.build, options.output, options.inputs)
+        elif options.intersection:
+            self.transform(options.output, options.inputs, self.intersection)
+        elif options.difference:
+            self.transform(options.output, options.inputs, self.difference)
+        elif options.union:
+            self.transform(options.output, options.inputs, self.union)
+        elif options.analyze:
+            self.analyze(options.output, options.inputs)
+        else:
+            sys.exit(1)  # Shouldn't really arrive here given argparse.
         print("executed in {0:.2f} seconds".format(time.time()-begin))
 
     def generate(self, build, output, inputs):
@@ -96,8 +108,8 @@ class ScovatScript:
             # Crawl the input directory and try to find all of the GCDA files.
             results = subprocess.Popen(command, shell=True, stdin=subprocess.PIPE,
                                        stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            (outputs, errors) = results.communicate() # Extract stdout and stderr data.
-            files = outputs.decode().split() # Split continuous file output to list.
+            (outputs, errors) = results.communicate()  # Extract stdout and stderr data.
+            files = outputs.decode().split()  # Split continuous file output to list.
             relative_files = [os.path.relpath(f, start=profile) for f in files]
 
             build_files = []
@@ -123,12 +135,15 @@ class ScovatScript:
                 if subprocess.call(command, shell=True, cwd=output_path,
                                    stdout=devnull, stderr=subprocess.STDOUT) == 1:
                     print("Need to have 'gcov' path defined in SCOVAT_GCOV env!")
-                    sys.exit(1) # Nothing can be done about this, just terminate.
+                    sys.exit(1)  # Nothing can be done about this, just terminate.
 
     def analyze(self, output, inputs):
-        profiles = inputs ; profile_anchor = profiles[0]
-        if len(profiles) != 1: self.transform(output, profiles[1:], self.union)
-        else: shutil.rmtree(output, ignore_errors=True) # Remove existing path.
+        profiles = inputs
+        profile_anchor = profiles[0]
+        if len(profiles) != 1:
+            self.transform(output, profiles[1:], self.union)
+        else:
+            shutil.rmtree(output, ignore_errors=True)  # Remove existing path.
         # After this, only two profiles, A and B exists. Only if given n files,
         # where B is 'union' of them, except the anchor. Anchor isn't analyzed.
         if not os.path.exists(output):
@@ -166,30 +181,46 @@ class ScovatScript:
             self.print_compare(anchor_path, output_path)
             (a, b) = (output_path, anchor_path)
             (at, bt) = (self.Transform(), self.Transform())
-            at.read(a) ; bt.read(b) # Parse profile data.
-            analysis = self.Analysis() # Results from it.
-            analysis.compare(at, bt) # Hamming, Jaccard.
-            analysis.write(output_path) # Overwrite tmp.
+            at.read(a)
+            bt.read(b)  # Parse profile data.
+            analysis = self.Analysis()  # Results from it.
+            analysis.compare(at, bt)  # Hamming, Jaccard.
+            analysis.write(output_path)  # Overwrite tmp.
 
-        print("==============ANALYSIS==============")
+        print("===========================ANALYSIS===========================")
         if analysis.functions[1] > 0:
-            print("function coverage ratio: {:.2f}%".format(float(analysis.functions[0]) / float(analysis.functions[1]) * 100))
+            coverage_ratio = float(analysis.functions[0]) / float(analysis.functions[1]) * 100
+            print("function coverage ratio: {:.2f}% ({} hit, {} total)".format(coverage_ratio,
+                  analysis.functions[0], analysis.functions[1]))
             if analysis.jaccard[0][1] > 0:
                 jaccard = float(analysis.jaccard[0][0]) / float(analysis.jaccard[0][1])
-                print("function jaccard coefficient: {:.2f}".format(jaccard))
-            if len(profiles) > 1: print("function hamming distance: {}".format(analysis.hamming[0]))
+                print("function jaccard coefficient: {:.2f} ({} intersect, {} total)".format(jaccard,
+                      analysis.jaccard[0][0], analysis.jaccard[0][1]))
+            if len(profiles) > 1:
+                print("function hamming distance: {} ({} matching)".format(analysis.hamming[0],
+                      analysis.functions[1] - analysis.hamming[0]))
         if analysis.branches[1] > 0:
-            print("branch coverage: {:.2f}%".format(float(analysis.branches[0]) / float(analysis.branches[1]) * 100))
+            coverage_ratio = float(analysis.branches[0]) / float(analysis.branches[1]) * 100
+            print("branch coverage ratio: {:.2f}% ({} hit, {} total)".format(coverage_ratio,
+                  analysis.branches[0], analysis.branches[1]))
             if analysis.jaccard[1][1] > 0:
                 jaccard = float(analysis.jaccard[1][0]) / float(analysis.jaccard[1][1])
-                print("branch jaccard coefficient: {:.2f}".format(jaccard))
-            if len(profiles) > 1: print("branch hamming distance: {}".format(analysis.hamming[1]))
+                print("branch jaccard coefficient: {:.2f} ({} intersect, {} total)".format(jaccard,
+                      analysis.jaccard[1][0], analysis.jaccard[1][1]))
+            if len(profiles) > 1:
+                print("branch hamming distance: {} ({} matching)".format(analysis.hamming[1],
+                      analysis.branches[1] - analysis.hamming[1]))
         if analysis.statements[1] > 0:
-            print("statement coverage: {:.2f}%".format(float(analysis.statements[0]) / float(analysis.statements[1]) * 100))
+            coverage_ratio = float(analysis.statements[0]) / float(analysis.statements[1]) * 100
+            print("statement coverage ratio: {:.2f}% ({} hit, {} total)".format(coverage_ratio,
+                  analysis.statements[0], analysis.statements[1]))
             if analysis.jaccard[2][1] > 0:
                 jaccard = float(analysis.jaccard[2][0]) / float(analysis.jaccard[2][1])
-                print("statement jaccard coefficient: {:.2f}".format(jaccard))
-            if len(profiles) > 1: print("statement hamming distance: {}".format(analysis.hamming[2]))
+                print("statement jaccard coefficient: {:.2f} ({} intersect, {} total)".format(jaccard,
+                      analysis.jaccard[2][0], analysis.jaccard[2][1]))
+            if len(profiles) > 1:
+                print("statement hamming distance: {} ({} matching)".format(analysis.hamming[2],
+                      analysis.statements[1] - analysis.hamming[2]))
 
     def transform(self, output, inputs, operation):
         profiles = inputs
@@ -201,8 +232,8 @@ class ScovatScript:
             os.makedirs(output)
         # Copy first profile to the output directory.
         [shutil.copy(os.path.join(result, f), output)
-                     for f in result_files]
-        del profiles[0] # Already processed.
+         for f in result_files]
+        del profiles[0]  # Already processed.
 
         for profile in profiles:
             # Find the sets of (un)matched files.
@@ -222,7 +253,7 @@ class ScovatScript:
                     self.print_process(output_path, output_path)
                     ruprofile_transform = self.Transform()
                     ruprofile_transform.read(output_path)
-                    ruprofile_transform.identity() # Zero.
+                    ruprofile_transform.identity()  # Zero.
                     ruprofile_transform.write(output_path)
             result_files.extend(runmatched)
 
@@ -230,11 +261,11 @@ class ScovatScript:
             for luprofile in lunmatched:
                 output_path = os.path.join(output, luprofile)
                 luprofile_path = os.path.join(profile, luprofile)
-                if  operation == self.intersection:
+                if operation == self.intersection:
                     self.print_process(output_path, output_path)
                     luprofile_transform = self.Transform()
                     luprofile_transform.read(output_path)
-                    luprofile_transform.identity() # Zero.
+                    luprofile_transform.identity()  # Zero.
                     luprofile_transform.write(output_path)
             # Doesn't need to extend, already in output.
 
@@ -245,33 +276,39 @@ class ScovatScript:
                 self.print_process(profile_path, output_path)
                 (a, b) = (output_path, profile_path)
                 (at, bt) = (self.Transform(), self.Transform())
-                at.read(a) ; bt.read(b) # Parse profile data.
-                operation(at, bt) # Apply operations on them.
-                at.write(a) # Overwrite profile data on disk.
+                at.read(a)
+                bt.read(b)  # Parse profile data.
+                operation(at, bt)  # Apply operations on them.
+                at.write(a)  # Overwrite profile data on disk.
 
     def intersection(self, aprof, bprof):
         def function(a, b):
             if a.count == 0 or\
                b.count == 0:
                 a.count = 0
-            else: a.count += b.count
+            else:
+                a.count += b.count
+
         def branch(a, b):
-            if a.btype == "taken" and\
-               b.btype == "taken":
+            if (a.btype == "taken" and
+               b.btype == "taken"):
                 a.btype = "taken"
-            elif (a.btype == "taken" and\
+            elif (a.btype == "taken" and
                   b.btype == "nottaken") or\
-                 (a.btype == "nottaken" and\
+                 (a.btype == "nottaken" and
                   b.btype == "taken") or\
-                 (a.btype == "nottaken" and \
+                 (a.btype == "nottaken" and
                   b.btype == "nottaken"):
-                  a.btype = "nottaken"
-            else: a.btype = "notexec"
+                a.btype = "nottaken"
+            else:
+                a.btype = "notexec"
+
         def statement(a, b):
             if a.count == 0 or\
                b.count == 0:
                 a.count = 0
-            else: a.count += b.count
+            else:
+                a.count += b.count
 
         for name in aprof.files:
             afile = aprof.files[name]
@@ -286,7 +323,8 @@ class ScovatScript:
                 for s in xrange(len(afile.statements)):
                     statement(afile.statements[s],
                               bfile.statements[s])
-            else: aprof.file_identity(name)
+            else:
+                aprof.file_identity(name)
         for name in bprof.files:
             if name not in aprof.files:
                 aprof.files[name] = bprof.files[name]
@@ -296,9 +334,11 @@ class ScovatScript:
         def function(a, b):
             if b.count != 0:
                 a.count = 0
+
         def branch(a, b):
             if a.btype == b.btype:
                 a.btype = "notexec"
+
         def statement(a, b):
             if b.count != 0:
                 a.count = 0
@@ -324,13 +364,15 @@ class ScovatScript:
     def union(self, aprof, bprof):
         def function(a, b):
             a.count += b.count
+
         def branch(a, b):
-            if a.btype == "taken" or\
-               b.btype == "taken":
+            if (a.btype == "taken" or
+               b.btype == "taken"):
                 a.btype = "taken"
-            elif a.btype == "nottaken" or\
-                 b.btype == "nottaken":
+            elif (a.btype == "nottaken" or
+                  b.btype == "nottaken"):
                 a.btype = "nottaken"
+
         def statement(a, b):
             a.count += b.count
 
@@ -356,21 +398,25 @@ class ScovatScript:
             def __init__(self, line, count):
                 self.count = count
                 self.line = line
+
         class Branch:
             def __init__(self, line, btype):
                 self.btype = btype
                 self.line = line
+
         class Function:
             def __init__(self, line, count, name):
                 self.count = count
                 self.line = line
                 self.name = name
+
         class File:
             def __init__(self, name):
                 self.branches = []
                 self.statements = []
                 self.functions = []
                 self.name = name
+
         def __init__(self):
             self.files = {}
 
@@ -378,27 +424,40 @@ class ScovatScript:
             with open(path, "r+b") as handle:
                 # Map all file contents into memory.
                 data = mmap.mmap(handle.fileno(), 0,
-                                prot=mmap.PROT_READ)
+                                 prot=mmap.PROT_READ)
                 # Parse intermediate representation.
-                self.parse(data) # Optimize looping?
-                handle.close() # Data already here.
+                self.parse(data)  # Optimize looping?
+                handle.close()  # Data already here.
+
         def write(self, path):
             with open(path, "w") as handle:
                 for name in self.files:
                     profile = self.files[name]
                     handle.write("file:{}\n".format(profile.name))
-                    for f in profile.functions: handle.write("function:{},{},{}\n".format(f.line, f.count, f.name))
-                    for b in profile.branches: handle.write("branch:{},{}\n".format(b.line, b.btype))
-                    for s in profile.statements: handle.write("lcount:{},{}\n".format(s.line, s.count))
+                    for f in profile.functions:
+                        handle.write("function:{},{},{}\n".format(f.line, f.count, f.name))
+                    for b in profile.branches:
+                        handle.write("branch:{},{}\n".format(b.line, b.btype))
+                    for s in profile.statements:
+                        handle.write("lcount:{},{}\n".format(s.line, s.count))
+
         def file_identity(self, name):
-            for f in self.files[name].functions: f.count = 0
-            for b in self.files[name].branches: b.btype = "notexec"
-            for s in self.files[name].statements: s.count = 0
+            for f in self.files[name].functions:
+                f.count = 0
+            for b in self.files[name].branches:
+                b.btype = "notexec"
+            for s in self.files[name].statements:
+                s.count = 0
+
         def identity(self):
             for name in self.files:
-                for f in self.files[name].functions: f.count = 0
-                for b in self.files[name].branches: b.btype = "notexec"
-                for s in self.files[name].statements: s.count = 0
+                for f in self.files[name].functions:
+                    f.count = 0
+                for b in self.files[name].branches:
+                    b.btype = "notexec"
+                for s in self.files[name].statements:
+                    s.count = 0
+
         def parse(self, data):
             for line in iter(data.readline, ""):
                 contents = line.split(":")
@@ -406,12 +465,19 @@ class ScovatScript:
                 token = contents[0]
                 if token == "file":
                     self.files[content] = self.File(content)
-                    current_file = self.files[content] # Optimize this later?
-                else: # Strip according to the common delimiter, then handle token.
-                    content = content.split(",") # Might want to handle the case when arguments don't match a certain int type cast?
-                    if token == "lcount": current_file.statements.append(self.Statement(int(content[0]), int(content[1])))
-                    elif token == "branch": current_file.branches.append(self.Branch(int(content[0]), content[1]))
-                    elif token == "function": current_file.functions.append(self.Function(int(content[0]), int(content[1]), content[2]))
+                    current_file = self.files[content]  # Optimize this later?
+                else:  # Strip according to the common delimiter, then handle token.
+                    content = content.split(",")  # Maybe handle when args don't match int the cast?
+                    if token == "lcount":
+                        current_file.statements.append(self.Statement(int(content[0]),
+                                                                      int(content[1])))
+                    elif token == "branch":
+                        current_file.branches.append(self.Branch(int(content[0]),
+                                                                 content[1]))
+                    elif token == "function":
+                        current_file.functions.append(self.Function(int(content[0]),
+                                                                    int(content[1]),
+                                                                    content[2]))
 
     class Analysis:
         class File:
@@ -422,13 +488,14 @@ class ScovatScript:
                 self.functions = [0, 0]
                 self.hamming = [0, 0, 0]
                 self.jaccard = [0, 0, 0]
-        branches = [0, 0] # (branches hit, total branches)
-        statements = [0, 0] # (statements hit, total statements)
-        functions = [0, 0] # (functions hit, total functions)
-        hamming = [0, 0, 0] # (function, branch, statement)
-        jaccard = [[0, 0], # (function, branch, statement)
-                   [0, 0], # then for each, the following:
-                   [0, 0]] # (intersected hits, union hit)
+        branches = [0, 0]    # (branches hit, total branches)
+        statements = [0, 0]  # (statements hit, total statements)
+        functions = [0, 0]   # (functions hit, total functions)
+        hamming = [0, 0, 0]  # (function, branch, statement)
+        jaccard = [[0, 0],   # (function, branch, statement)
+                   [0, 0],   # then for each, the following:
+                   [0, 0]]   # (intersected hits, union hit)
+
         def __init__(self):
             self.files = {}
 
@@ -436,7 +503,7 @@ class ScovatScript:
             for name in transform.files:
                 profile = transform.files[name]
                 self.files[name] = self.File(name)
-                p = self.files[name] # For easy access.
+                p = self.files[name]  # For easy access.
 
                 p.functions[1] = len(profile.functions)
                 for f in profile.functions:
@@ -474,16 +541,20 @@ class ScovatScript:
                 if name in bf.files:
                     bprofile = bf.files[name]
                     self.files[name] = self.File(name)
-                    p = self.files[name] # Easy access.
+                    p = self.files[name]  # Easy access.
 
                     jaccard_hits = 0
                     p.functions[1] = len(aprofile.functions)
                     for f in xrange(len(aprofile.functions)):
                         ahit = aprofile.functions[f].count > 0
                         bhit = bprofile.functions[f].count > 0
-                        if ahit and bhit: jaccard_hits += 1
-                        if ahit or bhit: p.functions[0] += 1
-                        if ahit != bhit: p.hamming[0] += 1
+                        if ahit and bhit:
+                            jaccard_hits += 1
+                        if ahit or bhit:
+                            p.functions[0] += 1
+                        if ahit != bhit:
+                            p.hamming[0] += 1
+
                     if p.functions[0] > 0:
                         p.jaccard[0] = float(jaccard_hits) / float(p.functions[0])
                         self.jaccard[0][1] += p.functions[0]
@@ -494,22 +565,30 @@ class ScovatScript:
                     for b in xrange(len(aprofile.branches)):
                         ahit = aprofile.branches[b].btype == "taken"
                         bhit = bprofile.branches[b].btype == "taken"
-                        if ahit and bhit: jaccard_hits += 1
-                        if ahit or bhit: p.branches[0] += 1
-                        if ahit != bhit: p.hamming[1] += 1
+                        if ahit and bhit:
+                            jaccard_hits += 1
+                        if ahit or bhit:
+                            p.branches[0] += 1
+                        if ahit != bhit:
+                            p.hamming[1] += 1
+
                     if p.branches[0] > 0:
                         p.jaccard[1] = float(jaccard_hits) / float(p.branches[0])
                         self.jaccard[1][1] += p.branches[0]
                         self.jaccard[1][0] += jaccard_hits
 
-                    jaccard_hits = 0 # New trendy summer hits!
+                    jaccard_hits = 0  # New trendy summer hits!
                     p.statements[1] = len(aprofile.statements)
                     for s in xrange(len(aprofile.statements)):
                         ahit = aprofile.statements[s].count > 0
                         bhit = bprofile.statements[s].count > 0
-                        if ahit and bhit: jaccard_hits += 1
-                        if ahit or bhit: p.statements[0] += 1
-                        if ahit != bhit: p.hamming[2] += 1
+                        if ahit and bhit:
+                            jaccard_hits += 1
+                        if ahit or bhit:
+                            p.statements[0] += 1
+                        if ahit != bhit:
+                            p.hamming[2] += 1
+
                     if p.statements[0] > 0:
                         p.jaccard[2] = float(jaccard_hits) / float(p.statements[0])
                         self.jaccard[2][1] += p.statements[0]
@@ -524,7 +603,6 @@ class ScovatScript:
                     self.hamming[0] += p.hamming[0]
                     self.hamming[1] += p.hamming[1]
                     self.hamming[2] += p.hamming[2]
-                else: print("SHOULDN'T HAPPEN?!?!")
 
         def write(self, path):
             with open(path, "w") as handle:
@@ -532,25 +610,36 @@ class ScovatScript:
                     profile = self.files[name]
                     handle.write("analysis:{}\n".format(profile.name))
                     if profile.functions[1] > 0:
-                        handle.write("functions:{},{},{:.2f}%\n".format(profile.functions[0], profile.functions[1],
-                                     float(profile.functions[0]) / float(profile.functions[1]) * 100))
+                        coverage_ratio = float(profile.functions[0]) / float(profile.functions[1])
+                        handle.write("functions:{},{},{:.2f}%\n".format(profile.functions[0],
+                                     profile.functions[1], coverage_ratio * 100))
                     if profile.branches[1] > 0:
-                        handle.write("branches:{},{},{:.2f}%\n".format(profile.branches[0], profile.branches[1],
-                                     float(profile.branches[0]) / float(profile.branches[1]) * 100))
+                        coverage_ratio = float(profile.branches[0]) / float(profile.branches[1])
+                        handle.write("branches:{},{},{:.2f}%\n".format(profile.branches[0],
+                                     profile.branches[1], coverage_ratio * 100))
                     if profile.statements[1] > 0:
-                        handle.write("statements:{},{},{:.2f}%\n".format(profile.statements[0], profile.statements[1],
-                                     float(profile.statements[0]) / float(profile.statements[1]) * 100))
-                    handle.write("jaccard:{:.2f},{:.2f},{:.2f}\n".format(profile.jaccard[0], profile.jaccard[1], profile.jaccard[2]))
-                    handle.write("hamming:{},{},{}\n".format(profile.hamming[0], profile.hamming[1], profile.hamming[2]))
+                        coverage_ratio = float(profile.statements[0]) / float(profile.statements[1])
+                        handle.write("statements:{},{},{:.2f}%\n".format(profile.statements[0],
+                                     profile.statements[1], coverage_ratio * 100))
+                    handle.write("jaccard:{:.2f},{:.2f},{:.2f}\n".format(profile.jaccard[0],
+                                                                         profile.jaccard[1],
+                                                                         profile.jaccard[2]))
+                    handle.write("hamming:{},{},{}\n".format(profile.hamming[0],
+                                                             profile.hamming[1],
+                                                             profile.hamming[2]))
 
     def print_crawl(self, folder):
         print("crawling   '{}'".format(folder))
+
     def print_copy(self, origin, destination):
         print("copying    '{}' to '{}'".format(origin, destination))
+
     def print_process(self, folder, output):
         print("processing '{}' to '{}'".format(folder, output))
+
     def print_compare(self, aprofile, bprofile):
         print("comparing  '{}' and '{}'".format(aprofile, bprofile))
+
     def print_report(self, path, output):
         print("reporting  '{}' to '{}'".format(path, output))
 
