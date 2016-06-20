@@ -1,7 +1,8 @@
 scovat: set coverage analysis tool
 ==================================
 
-```usage: scovat.py (-gb BUILD | -i | -d | -u | -r) -o OUT IN [IN...]
+```
+usage: scovat.py (-gb BUILD | -i | -d | -u | -r) -o OUT IN [IN...]
 
 Set Coverage Analysis Tool's (S.C.O.V.A.T) primary purpose is to transform,
 analyze and report a provided set of coverage profiles with the gcov 'gcda'
@@ -41,4 +42,5 @@ optional arguments:
                         similarity coefficient between the anchor and rest.
                         Similarities use 'criteria hit' as the set element.
   -o OUT, --output OUT  generic 'OUTPUT' directory for resulting operation.
-  -b DIR, --build DIR   matching 'BUILD' directory where profile was built.```
+  -b DIR, --build DIR   matching 'BUILD' directory where profile was built.
+  ```
